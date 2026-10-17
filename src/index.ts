@@ -326,6 +326,19 @@ if (clients.sonarr) {
       },
     },
     {
+      name: "sonarr_get_episode_releases",
+      description: "Read-only interactive Sonarr indexer search for alternative releases of an episode; does not grab or download. Returns compact release details and rejection reasons.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          episodeId: { type: "number", description: "Sonarr episode ID (not episode-file ID)" },
+          limit: { type: "number", description: "Maximum results (default 25, max 100)" },
+          offset: { type: "number", description: "Results to skip (default 0)" },
+        },
+        required: ["episodeId"],
+      },
+    },
+    {
       name: "sonarr_search_missing",
       description: "Trigger a search for all missing episodes in a series",
       inputSchema: {
@@ -1712,6 +1725,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             quality: f.quality?.quality?.name,
             resolution: f.quality?.quality?.resolution,
             mediaInfo: f.mediaInfo ?? null,
+          })),
+        });
+      }
+
+      case "sonarr_get_episode_releases": {
+        if (!clients.sonarr) throw new Error("Sonarr not configured");
+        const input = args as { episodeId: number; limit?: number; offset?: number };
+        if (!Number.isSafeInteger(input?.episodeId) || input.episodeId <= 0) {
+          return textError("episodeId must be a positive integer");
+        }
+        const limit = input.limit ?? 25;
+        const offset = input.offset ?? 0;
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+            !Number.isSafeInteger(offset) || offset < 0) {
+          return textError("limit must be 1-100 and offset must be a non-negative integer");
+        }
+        const releases = await clients.sonarr.getEpisodeReleases(input.episodeId);
+        const page = releases.slice(offset, offset + limit);
+        return jsonText({
+          episodeId: input.episodeId,
+          total: releases.length,
+          returned: page.length,
+          offset,
+          hasMore: offset + page.length < releases.length,
+          nextOffset: offset + page.length < releases.length ? offset + page.length : null,
+          releases: page.map(release => ({
+            title: release.title ?? null,
+            sizeBytes: release.size ?? null,
+            quality: release.quality?.quality?.name ?? null,
+            resolution: release.quality?.quality?.resolution ?? null,
+            indexer: release.indexer ?? null,
+            protocol: release.protocol ?? null,
+            languages: release.languages?.map(l => l.name).filter(Boolean) ?? [],
+            rejected: release.rejected ?? false,
+            rejections: release.rejections ?? [],
+            customFormatScore: release.customFormatScore ?? null,
+            seeders: release.seeders ?? null,
+            leechers: release.leechers ?? null,
+            ageDays: release.age ?? null,
+            downloadAllowed: release.downloadAllowed ?? null,
           })),
         });
       }
