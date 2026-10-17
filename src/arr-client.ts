@@ -740,9 +740,31 @@ export class SonarrClient extends ArrClient {
   }
 }
 
+export interface RadarrRelease extends SonarrRelease {}
+export interface RadarrMovieFile {
+  id: number; movieId: number; relativePath: string; size: number;
+  sceneName?: string; releaseGroup?: string;
+  quality?: { quality?: { name?: string; resolution?: number } };
+  mediaInfo?: Record<string, unknown>;
+}
+
 export class RadarrClient extends ArrClient {
   constructor(config: ArrConfig) {
     super('radarr', config);
+  }
+
+  async getMovieFiles(movieId: number): Promise<RadarrMovieFile[]> {
+    return this['request']<RadarrMovieFile[]>(`/moviefile?movieId=${movieId}`);
+  }
+  async getMovieReleases(movieId: number): Promise<RadarrRelease[]> {
+    return this['request']<RadarrRelease[]>(`/release?movieId=${movieId}`);
+  }
+  async grabMovieRelease(movieId: number, indexerId: number, guid: string): Promise<unknown> {
+    const releases = await this.getMovieReleases(movieId);
+    const release = releases.find(r => r.indexerId === indexerId && r.guid === guid);
+    if (!release) throw new Error("Selected release is no longer available for this movie");
+    if (release.downloadAllowed === false) throw new Error("Radarr reports that this release cannot be downloaded");
+    return this['request']<unknown>('/release', {method:'POST',body:JSON.stringify({guid,indexerId})});
   }
 
   /**
