@@ -1,4 +1,4 @@
-name: Publish Radarr MCP-ARR candidate
+name: Publish MCP-ARR 1.7.3-custom.7
 on:
   push:
     branches:
