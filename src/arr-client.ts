@@ -520,6 +520,24 @@ export class ArrClient {
     return this.request<QualityProfile[]>('/qualityprofile');
   }
 
+  async patchQualityProfile(id: number, patch: { upgradeAllowed?: boolean; cutoff?: number; minFormatScore?: number; cutoffFormatScore?: number; formatScores?: Array<{ formatId: number; score: number }> }, apply: boolean, expectedName?: string): Promise<unknown> {
+    const original = await this.request<QualityProfile>(`/qualityprofile/${id}`);
+    if (original.id !== id || (expectedName && original.name !== expectedName)) throw new Error('Profile identity mismatch');
+    const proposed: QualityProfile = JSON.parse(JSON.stringify(original));
+    if (patch.upgradeAllowed !== undefined) proposed.upgradeAllowed = patch.upgradeAllowed;
+    if (patch.cutoff !== undefined) proposed.cutoff = patch.cutoff;
+    if (patch.minFormatScore !== undefined) proposed.minFormatScore = patch.minFormatScore;
+    if (patch.cutoffFormatScore !== undefined) proposed.cutoffFormatScore = patch.cutoffFormatScore;
+    for (const v of patch.formatScores ?? []) {
+      const item = proposed.formatItems.find(x => x.format === v.formatId);
+      if (!item) throw new Error(`Custom format ID ${v.formatId} is not assigned to this profile`);
+      item.score = v.score;
+    }
+    if (!apply) return { applied: false, original, proposed };
+    const updated = await this.request<QualityProfile>(`/qualityprofile/${id}`, {method: 'PUT', body: JSON.stringify(proposed)});
+    return { applied: true, original, updated };
+  }
+
   /**
    * Get quality definitions (size limits)
    */
