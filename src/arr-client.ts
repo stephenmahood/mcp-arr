@@ -109,6 +109,18 @@ export interface Episode {
   };
 }
 
+export interface SonarrEpisodeFile {
+  id: number;
+  seriesId: number;
+  seasonNumber: number;
+  relativePath: string;
+  size: number;
+  sceneName?: string;
+  releaseGroup?: string;
+  quality?: { quality?: { name?: string; resolution?: number } };
+  mediaInfo?: Record<string, unknown>;
+}
+
 export interface Movie {
   id: number;
   title: string;
@@ -614,6 +626,13 @@ export class SonarrClient extends ArrClient {
       url += `&seasonNumber=${seasonNumber}`;
     }
     return this['request']<Episode[]>(url);
+  }
+
+  /**
+   * Retrieve Sonarr episode-file metadata without reading media files.
+   */
+  async getEpisodeFiles(seriesId: number): Promise<SonarrEpisodeFile[]> {
+    return this['request']<SonarrEpisodeFile[]>(`/episodefile?seriesId=${seriesId}`);
   }
 
   /**
