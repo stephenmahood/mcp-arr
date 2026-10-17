@@ -313,13 +313,14 @@ if (clients.sonarr) {
     },
     {
       name: "sonarr_get_episode_files",
-      description: "Get read-only Sonarr episode-file metadata, size, quality and available MediaInfo for one series. Paginated; no file scanning.",
+      description: "Get paginated Sonarr episode-file metadata. fields=summary (default) gives compact codec and size data; fields=full returns all available MediaInfo. Read-only.",
       inputSchema: {
         type: "object" as const,
         properties: {
           seriesId: { type: "number", description: "Sonarr series ID" },
           limit: { type: "number", description: "Maximum records (default 25, max 100)" },
           offset: { type: "number", description: "Records to skip (default 0)" },
+          fields: { type: "string", enum: ["summary", "full"], description: "Response detail (default summary)" },
         },
         required: ["seriesId"],
       },
@@ -1667,27 +1668,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "sonarr_get_episode_files": {
         if (!clients.sonarr) throw new Error("Sonarr not configured");
-        const input = args as { seriesId: number; limit?: number; offset?: number };
+        const input = args as { seriesId: number; limit?: number; offset?: number; fields?: "summary" | "full" };
         if (!Number.isSafeInteger(input?.seriesId) || input.seriesId <= 0) {
           return textError("seriesId must be a positive integer");
         }
         const limit = input.limit === undefined ? 25 : input.limit;
         const offset = input.offset === undefined ? 0 : input.offset;
+        const fields = input.fields ?? "summary";
         if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
             !Number.isSafeInteger(offset) || offset < 0) {
           return textError("limit must be 1-100 and offset must be a non-negative integer");
+        }
+        if (fields !== "summary" && fields !== "full") {
+          return textError("fields must be summary or full");
         }
         const files = await clients.sonarr.getEpisodeFiles(input.seriesId);
         const page = files.slice(offset, offset + limit);
         return jsonText({
           seriesId: input.seriesId,
+          fields,
           total: files.length,
           returned: page.length,
           offset,
           limit,
           hasMore: offset + page.length < files.length,
           nextOffset: offset + page.length < files.length ? offset + page.length : null,
-          files: page.map(f => ({
+          files: page.map(f => fields === "summary" ? ({
+            id: f.id,
+            sizeBytes: f.size,
+            videoCodec: f.mediaInfo?.videoCodec ?? null,
+            videoBitrate: f.mediaInfo?.videoBitrate ?? null,
+            audioCodec: f.mediaInfo?.audioCodec ?? null,
+            resolution: f.mediaInfo?.resolution ?? null,
+            quality: f.quality?.quality?.name ?? null,
+            mediaInfoAvailable: f.mediaInfo != null,
+          }) : ({
             id: f.id,
             seasonNumber: f.seasonNumber,
             relativePath: f.relativePath,
