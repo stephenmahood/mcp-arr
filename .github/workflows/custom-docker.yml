@@ -2,7 +2,7 @@ name: Build custom MCP-ARR
 on:
   push:
     branches:
-      - feature/sonarr-episode-file-metadata
+      - feature/sonarr-readonly-release-lookup
   workflow_dispatch:
 
 permissions:
@@ -31,4 +31,4 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64
-          tags: ghcr.io/${{ github.repository }}:1.7.3-custom.2
+          tags: ghcr.io/${{ github.repository }}:1.7.3-custom.3
