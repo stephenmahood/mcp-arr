@@ -353,6 +353,24 @@ if (clients.sonarr) {
       },
     },
     ...(["sonarr", "radarr"] as const).map(service => ({
+      name: `${service}_get_custom_formats`,
+      description: "Read existing custom formats and their exact specifications; no mutations.",
+      inputSchema: { type: "object" as const, properties: {}, required: [] },
+    })),
+    ...(["sonarr", "radarr"] as const).map(service => ({
+      name: `${service}_create_custom_format`,
+      description: "Create a new custom format from explicit specifications. Defaults to dry-run; apply=true creates after user approval. Rejects duplicate names.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          name: {type: "string", description: "New custom format name"},
+          specifications: {type: "array", items: {type: "object", additionalProperties: true}, description: "Native Sonarr/Radarr custom format specifications"},
+          apply: {type: "boolean", description: "Create in service (default false)"}
+        },
+        required: ["name", "specifications"],
+      },
+    })),
+    ...(["sonarr", "radarr"] as const).map(service => ({
       name: `${service}_update_quality_profile`,
       description: "Safely patch an existing quality profile. Defaults to dry-run; apply=true writes. Returns complete original profile for rollback. Does not change quality ordering or add new custom formats.",
       inputSchema: {
@@ -1816,6 +1834,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await clients.sonarr.grabEpisodeRelease(input.episodeId, input.indexerId, input.guid);
         return jsonText({ grabbed: true, episodeId: input.episodeId, result });
+      }
+
+      case "sonarr_get_custom_formats":
+      case "radarr_get_custom_formats": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        return jsonText(await client.getCustomFormats());
+      }
+      case "sonarr_create_custom_format":
+      case "radarr_create_custom_format": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        const input = args as {name: string; specifications: Array<Record<string, unknown>>; apply?: boolean};
+        if (typeof input?.name !== "string" || !input.name.trim() || input.name.length > 100 ||
+            !Array.isArray(input.specifications) || !input.specifications.length ||
+            input.specifications.length > 20 || input.specifications.some(v => !v || typeof v !== "object" || Array.isArray(v)) ||
+            (input.apply !== undefined && typeof input.apply !== "boolean")) return textError("Invalid custom format");
+        return jsonText(await client.createCustomFormat({name: input.name, specifications: input.specifications}, input.apply === true));
       }
 
       case "sonarr_update_quality_profile":
