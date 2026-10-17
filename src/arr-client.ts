@@ -520,6 +520,20 @@ export class ArrClient {
     return this.request<QualityProfile[]>('/qualityprofile');
   }
 
+  async getCustomFormats(): Promise<Array<Record<string, unknown> & {id: number; name: string}>> {
+    return this.request<Array<Record<string, unknown> & {id: number; name: string}>>('/customformat');
+  }
+
+  async createCustomFormat(input: { name: string; specifications: Array<Record<string, unknown>> }, apply: boolean): Promise<unknown> {
+    const existing = await this.getCustomFormats();
+    if (existing.some(f => f.name.toLowerCase() === input.name.toLowerCase())) {
+      throw new Error('A custom format with this name already exists');
+    }
+    const payload = { name: input.name, includeCustomFormatWhenRenaming: false, specifications: input.specifications };
+    if (!apply) return { applied: false, proposed: payload, existingNames: existing.map(x => x.name) };
+    return { applied: true, created: await this.request<unknown>('/customformat', {method: 'POST', body: JSON.stringify(payload)}) };
+  }
+
   async patchQualityProfile(id: number, patch: { upgradeAllowed?: boolean; cutoff?: number; minFormatScore?: number; cutoffFormatScore?: number; formatScores?: Array<{ formatId: number; score: number }> }, apply: boolean, expectedName?: string): Promise<unknown> {
     const original = await this.request<QualityProfile>(`/qualityprofile/${id}`);
     if (original.id !== id || (expectedName && original.name !== expectedName)) throw new Error('Profile identity mismatch');
@@ -529,8 +543,13 @@ export class ArrClient {
     if (patch.minFormatScore !== undefined) proposed.minFormatScore = patch.minFormatScore;
     if (patch.cutoffFormatScore !== undefined) proposed.cutoffFormatScore = patch.cutoffFormatScore;
     for (const v of patch.formatScores ?? []) {
-      const item = proposed.formatItems.find(x => x.format === v.formatId);
-      if (!item) throw new Error(`Custom format ID ${v.formatId} is not assigned to this profile`);
+      let item = proposed.formatItems.find(x => x.format === v.formatId);
+      if (!item) {
+        const format = (await this.getCustomFormats()).find(x => x.id === v.formatId);
+        if (!format) throw new Error(`Custom format ID ${v.formatId} does not exist`);
+        item = { format: v.formatId, name: format.name, score: 0 };
+        proposed.formatItems.push(item);
+      }
       item.score = v.score;
     }
     if (!apply) return { applied: false, original, proposed };
