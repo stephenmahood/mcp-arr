@@ -109,6 +109,24 @@ export interface Episode {
   };
 }
 
+export interface SonarrRelease {
+  guid?: string;
+  indexerId?: number;
+  title?: string;
+  size?: number;
+  indexer?: string;
+  protocol?: string;
+  quality?: { quality?: { name?: string; resolution?: number } };
+  languages?: Array<{ name?: string }>;
+  rejected?: boolean;
+  rejections?: string[];
+  customFormatScore?: number;
+  seeders?: number;
+  leechers?: number;
+  age?: number;
+  downloadAllowed?: boolean;
+}
+
 export interface SonarrEpisodeFile {
   id: number;
   seriesId: number;
@@ -502,6 +520,43 @@ export class ArrClient {
     return this.request<QualityProfile[]>('/qualityprofile');
   }
 
+  async getCustomFormats(): Promise<Array<Record<string, unknown> & {id: number; name: string}>> {
+    return this.request<Array<Record<string, unknown> & {id: number; name: string}>>('/customformat');
+  }
+
+  async createCustomFormat(input: { name: string; specifications: Array<Record<string, unknown>> }, apply: boolean): Promise<unknown> {
+    const existing = await this.getCustomFormats();
+    if (existing.some(f => f.name.toLowerCase() === input.name.toLowerCase())) {
+      throw new Error('A custom format with this name already exists');
+    }
+    const payload = { name: input.name, includeCustomFormatWhenRenaming: false, specifications: input.specifications };
+    if (!apply) return { applied: false, proposed: payload, existingNames: existing.map(x => x.name) };
+    return { applied: true, created: await this.request<unknown>('/customformat', {method: 'POST', body: JSON.stringify(payload)}) };
+  }
+
+  async patchQualityProfile(id: number, patch: { upgradeAllowed?: boolean; cutoff?: number; minFormatScore?: number; cutoffFormatScore?: number; formatScores?: Array<{ formatId: number; score: number }> }, apply: boolean, expectedName?: string): Promise<unknown> {
+    const original = await this.request<QualityProfile>(`/qualityprofile/${id}`);
+    if (original.id !== id || (expectedName && original.name !== expectedName)) throw new Error('Profile identity mismatch');
+    const proposed: QualityProfile = JSON.parse(JSON.stringify(original));
+    if (patch.upgradeAllowed !== undefined) proposed.upgradeAllowed = patch.upgradeAllowed;
+    if (patch.cutoff !== undefined) proposed.cutoff = patch.cutoff;
+    if (patch.minFormatScore !== undefined) proposed.minFormatScore = patch.minFormatScore;
+    if (patch.cutoffFormatScore !== undefined) proposed.cutoffFormatScore = patch.cutoffFormatScore;
+    for (const v of patch.formatScores ?? []) {
+      let item = proposed.formatItems.find(x => x.format === v.formatId);
+      if (!item) {
+        const format = (await this.getCustomFormats()).find(x => x.id === v.formatId);
+        if (!format) throw new Error(`Custom format ID ${v.formatId} does not exist`);
+        item = { format: v.formatId, name: format.name, score: 0 };
+        proposed.formatItems.push(item);
+      }
+      item.score = v.score;
+    }
+    if (!apply) return { applied: false, original, proposed };
+    const updated = await this.request<QualityProfile>(`/qualityprofile/${id}`, {method: 'PUT', body: JSON.stringify(proposed)});
+    return { applied: true, original, updated };
+  }
+
   /**
    * Get quality definitions (size limits)
    */
@@ -633,6 +688,29 @@ export class SonarrClient extends ArrClient {
    */
   async getEpisodeFiles(seriesId: number): Promise<SonarrEpisodeFile[]> {
     return this['request']<SonarrEpisodeFile[]>(`/episodefile?seriesId=${seriesId}`);
+  }
+
+  /**
+   * Query indexer releases for an episode without grabbing a release.
+   * Sonarr GET /release performs an interactive/manual search.
+   */
+  async getEpisodeReleases(episodeId: number): Promise<SonarrRelease[]> {
+    return this['request']<SonarrRelease[]>(`/release?episodeId=${episodeId}`);
+  }
+
+  /**
+   * Manually grab an exact indexer release. Re-check availability against the
+   * episode's interactive results before posting to Sonarr.
+   */
+  async grabEpisodeRelease(episodeId: number, indexerId: number, guid: string): Promise<unknown> {
+    const releases = await this.getEpisodeReleases(episodeId);
+    const release = releases.find(r => r.indexerId === indexerId && r.guid === guid);
+    if (!release) throw new Error("Selected release is no longer available for this episode");
+    if (release.downloadAllowed === false) throw new Error("Sonarr reports that this release cannot be downloaded");
+    return this['request']<unknown>('/release', {
+      method: 'POST',
+      body: JSON.stringify({ guid, indexerId }),
+    });
   }
 
   /**

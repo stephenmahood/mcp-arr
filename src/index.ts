@@ -326,6 +326,69 @@ if (clients.sonarr) {
       },
     },
     {
+      name: "sonarr_get_episode_releases",
+      description: "Read-only interactive Sonarr indexer search for alternative releases of an episode; does not grab or download. Returns compact release details and rejection reasons.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          episodeId: { type: "number", description: "Sonarr episode ID (not episode-file ID)" },
+          limit: { type: "number", description: "Maximum results (default 25, max 100)" },
+          offset: { type: "number", description: "Results to skip (default 0)" },
+        },
+        required: ["episodeId"],
+      },
+    },
+    {
+      name: "sonarr_grab_release",
+      description: "Manually grab one specifically approved Sonarr release, including releases rejected for preference reasons. Causes a download; call only after user explicitly approves the exact release. Revalidates release against current interactive search.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          episodeId: { type: "number", description: "Sonarr episode ID" },
+          indexerId: { type: "number", description: "Indexer ID returned by sonarr_get_episode_releases" },
+          guid: { type: "string", description: "Exact release GUID returned by sonarr_get_episode_releases" },
+          confirmed: { type: "boolean", description: "True only after the user approves grabbing this exact release" },
+        },
+        required: ["episodeId", "indexerId", "guid", "confirmed"],
+      },
+    },
+    ...(["sonarr", "radarr"] as const).map(service => ({
+      name: `${service}_get_custom_formats`,
+      description: "Read existing custom formats and their exact specifications; no mutations.",
+      inputSchema: { type: "object" as const, properties: {}, required: [] },
+    })),
+    ...(["sonarr", "radarr"] as const).map(service => ({
+      name: `${service}_create_custom_format`,
+      description: "Create a new custom format from explicit specifications. Defaults to dry-run; apply=true creates after user approval. Rejects duplicate names.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          name: {type: "string", description: "New custom format name"},
+          specifications: {type: "array", items: {type: "object", additionalProperties: true}, description: "Native Sonarr/Radarr custom format specifications"},
+          apply: {type: "boolean", description: "Create in service (default false)"}
+        },
+        required: ["name", "specifications"],
+      },
+    })),
+    ...(["sonarr", "radarr"] as const).map(service => ({
+      name: `${service}_update_quality_profile`,
+      description: "Safely patch an existing quality profile. Defaults to dry-run; apply=true writes. Returns complete original profile for rollback. Does not change quality ordering or add new custom formats.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          profileId: { type: "number", description: "Existing quality profile ID" },
+          expectedName: { type: "string", description: "Exact expected name; required to apply" },
+          apply: { type: "boolean", description: "Apply changes, default false for preview" },
+          upgradeAllowed: { type: "boolean" },
+          cutoff: { type: "number" },
+          minFormatScore: { type: "number" },
+          cutoffFormatScore: { type: "number" },
+          formatScores: { type: "array", items: { type: "object", properties: {formatId: {type: "number"}, score: {type: "number"}}, required: ["formatId", "score"] } },
+        },
+        required: ["profileId"],
+      },
+    })),
+    {
       name: "sonarr_search_missing",
       description: "Trigger a search for all missing episodes in a series",
       inputSchema: {
@@ -1714,6 +1777,102 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             mediaInfo: f.mediaInfo ?? null,
           })),
         });
+      }
+
+      case "sonarr_get_episode_releases": {
+        if (!clients.sonarr) throw new Error("Sonarr not configured");
+        const input = args as { episodeId: number; limit?: number; offset?: number };
+        if (!Number.isSafeInteger(input?.episodeId) || input.episodeId <= 0) {
+          return textError("episodeId must be a positive integer");
+        }
+        const limit = input.limit ?? 25;
+        const offset = input.offset ?? 0;
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+            !Number.isSafeInteger(offset) || offset < 0) {
+          return textError("limit must be 1-100 and offset must be a non-negative integer");
+        }
+        const releases = await clients.sonarr.getEpisodeReleases(input.episodeId);
+        const page = releases.slice(offset, offset + limit);
+        return jsonText({
+          episodeId: input.episodeId,
+          total: releases.length,
+          returned: page.length,
+          offset,
+          hasMore: offset + page.length < releases.length,
+          nextOffset: offset + page.length < releases.length ? offset + page.length : null,
+          releases: page.map(release => ({
+            title: release.title ?? null,
+            guid: release.guid ?? null,
+            indexerId: release.indexerId ?? null,
+            sizeBytes: release.size ?? null,
+            quality: release.quality?.quality?.name ?? null,
+            resolution: release.quality?.quality?.resolution ?? null,
+            indexer: release.indexer ?? null,
+            protocol: release.protocol ?? null,
+            languages: release.languages?.map(l => l.name).filter(Boolean) ?? [],
+            rejected: release.rejected ?? false,
+            rejections: release.rejections ?? [],
+            customFormatScore: release.customFormatScore ?? null,
+            seeders: release.seeders ?? null,
+            leechers: release.leechers ?? null,
+            ageDays: release.age ?? null,
+            downloadAllowed: release.downloadAllowed ?? null,
+          })),
+        });
+      }
+
+      case "sonarr_grab_release": {
+        if (!clients.sonarr) throw new Error("Sonarr not configured");
+        const input = args as { episodeId: number; indexerId: number; guid: string; confirmed: boolean };
+        if (!Number.isSafeInteger(input?.episodeId) || input.episodeId <= 0 ||
+            !Number.isSafeInteger(input?.indexerId) || input.indexerId <= 0 ||
+            typeof input?.guid !== "string" || !input.guid.trim() || input.guid.length > 2048) {
+          return textError("Valid episodeId, indexerId and release guid are required");
+        }
+        if (input.confirmed !== true) {
+          return textError("Explicit user approval is required before grabbing a release");
+        }
+        const result = await clients.sonarr.grabEpisodeRelease(input.episodeId, input.indexerId, input.guid);
+        return jsonText({ grabbed: true, episodeId: input.episodeId, result });
+      }
+
+      case "sonarr_get_custom_formats":
+      case "radarr_get_custom_formats": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        return jsonText(await client.getCustomFormats());
+      }
+      case "sonarr_create_custom_format":
+      case "radarr_create_custom_format": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        const input = args as {name: string; specifications: Array<Record<string, unknown>>; apply?: boolean};
+        if (typeof input?.name !== "string" || !input.name.trim() || input.name.length > 100 ||
+            !Array.isArray(input.specifications) || !input.specifications.length ||
+            input.specifications.length > 20 || input.specifications.some(v => !v || typeof v !== "object" || Array.isArray(v)) ||
+            (input.apply !== undefined && typeof input.apply !== "boolean")) return textError("Invalid custom format");
+        return jsonText(await client.createCustomFormat({name: input.name, specifications: input.specifications}, input.apply === true));
+      }
+
+      case "sonarr_update_quality_profile":
+      case "radarr_update_quality_profile": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        const input = args as { profileId: number; expectedName?: string; apply?: boolean; upgradeAllowed?: boolean; cutoff?: number; minFormatScore?: number; cutoffFormatScore?: number; formatScores?: Array<{ formatId: number; score: number }> };
+        if (!Number.isSafeInteger(input?.profileId) || input.profileId <= 0 ||
+            (input.expectedName !== undefined && (typeof input.expectedName !== "string" || !input.expectedName.trim())) ||
+            (input.apply !== undefined && typeof input.apply !== "boolean") ||
+            (input.upgradeAllowed !== undefined && typeof input.upgradeAllowed !== "boolean") ||
+            (input.cutoff !== undefined && (!Number.isSafeInteger(input.cutoff) || input.cutoff < 0)) ||
+            (input.minFormatScore !== undefined && (!Number.isSafeInteger(input.minFormatScore) || Math.abs(input.minFormatScore) > 100000)) ||
+            (input.cutoffFormatScore !== undefined && (!Number.isSafeInteger(input.cutoffFormatScore) || Math.abs(input.cutoffFormatScore) > 100000)) ||
+            (input.formatScores !== undefined && (!Array.isArray(input.formatScores) || input.formatScores.length > 100 ||
+              input.formatScores.some(v => !Number.isSafeInteger(v.formatId) || v.formatId <= 0 || !Number.isSafeInteger(v.score) || Math.abs(v.score) > 100000)))) {
+          return textError("Invalid quality profile patch");
+        }
+        if (input.apply === true && !input.expectedName) return textError("expectedName is required to apply changes");
+        if (input.upgradeAllowed === undefined && input.cutoff === undefined && input.minFormatScore === undefined && input.cutoffFormatScore === undefined && (!input.formatScores || input.formatScores.length === 0)) return textError("No changes requested");
+        return jsonText(await client.patchQualityProfile(input.profileId, {upgradeAllowed: input.upgradeAllowed, cutoff: input.cutoff, minFormatScore: input.minFormatScore, cutoffFormatScore: input.cutoffFormatScore, formatScores: input.formatScores}, input.apply === true, input.expectedName));
       }
 
       case "sonarr_search_missing": {
