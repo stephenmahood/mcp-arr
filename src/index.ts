@@ -352,6 +352,24 @@ if (clients.sonarr) {
         required: ["episodeId", "indexerId", "guid", "confirmed"],
       },
     },
+    ...(["sonarr", "radarr"] as const).map(service => ({
+      name: `${service}_update_quality_profile`,
+      description: "Safely patch an existing quality profile. Defaults to dry-run; apply=true writes. Returns complete original profile for rollback. Does not change quality ordering or add new custom formats.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          profileId: { type: "number", description: "Existing quality profile ID" },
+          expectedName: { type: "string", description: "Exact expected name; required to apply" },
+          apply: { type: "boolean", description: "Apply changes, default false for preview" },
+          upgradeAllowed: { type: "boolean" },
+          cutoff: { type: "number" },
+          minFormatScore: { type: "number" },
+          cutoffFormatScore: { type: "number" },
+          formatScores: { type: "array", items: { type: "object", properties: {formatId: {type: "number"}, score: {type: "number"}}, required: ["formatId", "score"] } },
+        },
+        required: ["profileId"],
+      },
+    })),
     {
       name: "sonarr_search_missing",
       description: "Trigger a search for all missing episodes in a series",
@@ -1798,6 +1816,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const result = await clients.sonarr.grabEpisodeRelease(input.episodeId, input.indexerId, input.guid);
         return jsonText({ grabbed: true, episodeId: input.episodeId, result });
+      }
+
+      case "sonarr_update_quality_profile":
+      case "radarr_update_quality_profile": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        const input = args as { profileId: number; expectedName?: string; apply?: boolean; upgradeAllowed?: boolean; cutoff?: number; minFormatScore?: number; cutoffFormatScore?: number; formatScores?: Array<{ formatId: number; score: number }> };
+        if (!Number.isSafeInteger(input?.profileId) || input.profileId <= 0 ||
+            (input.expectedName !== undefined && (typeof input.expectedName !== "string" || !input.expectedName.trim())) ||
+            (input.apply !== undefined && typeof input.apply !== "boolean") ||
+            (input.upgradeAllowed !== undefined && typeof input.upgradeAllowed !== "boolean") ||
+            (input.cutoff !== undefined && (!Number.isSafeInteger(input.cutoff) || input.cutoff < 0)) ||
+            (input.minFormatScore !== undefined && (!Number.isSafeInteger(input.minFormatScore) || Math.abs(input.minFormatScore) > 100000)) ||
+            (input.cutoffFormatScore !== undefined && (!Number.isSafeInteger(input.cutoffFormatScore) || Math.abs(input.cutoffFormatScore) > 100000)) ||
+            (input.formatScores !== undefined && (!Array.isArray(input.formatScores) || input.formatScores.length > 100 ||
+              input.formatScores.some(v => !Number.isSafeInteger(v.formatId) || v.formatId <= 0 || !Number.isSafeInteger(v.score) || Math.abs(v.score) > 100000)))) {
+          return textError("Invalid quality profile patch");
+        }
+        if (input.apply === true && !input.expectedName) return textError("expectedName is required to apply changes");
+        if (input.upgradeAllowed === undefined && input.cutoff === undefined && input.minFormatScore === undefined && input.cutoffFormatScore === undefined && (!input.formatScores || input.formatScores.length === 0)) return textError("No changes requested");
+        return jsonText(await client.patchQualityProfile(input.profileId, {upgradeAllowed: input.upgradeAllowed, cutoff: input.cutoff, minFormatScore: input.minFormatScore, cutoffFormatScore: input.cutoffFormatScore, formatScores: input.formatScores}, input.apply === true, input.expectedName));
       }
 
       case "sonarr_search_missing": {
