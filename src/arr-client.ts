@@ -109,6 +109,22 @@ export interface Episode {
   };
 }
 
+export interface SonarrRelease {
+  title?: string;
+  size?: number;
+  indexer?: string;
+  protocol?: string;
+  quality?: { quality?: { name?: string; resolution?: number } };
+  languages?: Array<{ name?: string }>;
+  rejected?: boolean;
+  rejections?: string[];
+  customFormatScore?: number;
+  seeders?: number;
+  leechers?: number;
+  age?: number;
+  downloadAllowed?: boolean;
+}
+
 export interface SonarrEpisodeFile {
   id: number;
   seriesId: number;
@@ -633,6 +649,14 @@ export class SonarrClient extends ArrClient {
    */
   async getEpisodeFiles(seriesId: number): Promise<SonarrEpisodeFile[]> {
     return this['request']<SonarrEpisodeFile[]>(`/episodefile?seriesId=${seriesId}`);
+  }
+
+  /**
+   * Query indexer releases for an episode without grabbing a release.
+   * Sonarr GET /release performs an interactive/manual search.
+   */
+  async getEpisodeReleases(episodeId: number): Promise<SonarrRelease[]> {
+    return this['request']<SonarrRelease[]>(`/release?episodeId=${episodeId}`);
   }
 
   /**
