@@ -476,6 +476,9 @@ if (clients.sonarr) {
 // Radarr tools
 if (clients.radarr) {
   TOOLS.push(
+    {name:"radarr_get_movie_files",description:"Read-only Radarr movie file sizes and MediaInfo",inputSchema:{type:"object" as const,properties:{movieId:{type:'number'},limit:{type:'number'},offset:{type:'number'},fields:{type:'string',enum:['summary','full']}},required:["movieId"]}},
+    {name:"radarr_get_movie_releases",description:"Read-only interactive Radarr release search; no downloads",inputSchema:{type:"object" as const,properties:{movieId:{type:'number'},limit:{type:'number'},offset:{type:'number'}},required:["movieId"]}},
+    {name:"radarr_grab_release",description:"Grab an explicitly approved exact Radarr release and start downloading",inputSchema:{type:"object" as const,properties:{movieId:{type:'number'},indexerId:{type:'number'},guid:{type:'string'},confirmed:{type:'boolean'}},required:["movieId","indexerId","guid","confirmed"]}},
     {
       name: "radarr_get_movies",
       description: "Get movies from Radarr library with optional pagination and title filtering. Defaults to limit=25 to avoid very large responses. Use offset to fetch additional pages.",
@@ -1953,6 +1956,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       // Radarr handlers
+      case "radarr_get_movie_files": {
+        if(!clients.radarr) throw new Error("Radarr not configured");
+        const v=args as {movieId:number;limit?:number;offset?:number;fields?:"summary"|"full"};
+        if(!Number.isSafeInteger(v?.movieId)||v.movieId<=0) return textError("Invalid movieId");
+        const limit=v.limit??25, offset=v.offset??0, fields=v.fields??"summary";
+        if(!Number.isSafeInteger(limit)||limit<1||limit>100||!Number.isSafeInteger(offset)||offset<0||!["summary","full"].includes(fields))return textError("Invalid pagination or fields");
+        const all=await clients.radarr.getMovieFiles(v.movieId),page=all.slice(offset,offset+limit);
+        return jsonText({movieId:v.movieId,total:all.length,offset,returned:page.length,hasMore:offset+page.length<all.length,
+          files:page.map(f=>fields==="full"?{id:f.id,movieId:f.movieId,relativePath:f.relativePath,sizeBytes:f.size,sceneName:f.sceneName,releaseGroup:f.releaseGroup,quality:f.quality?.quality?.name,mediaInfo:f.mediaInfo??null}
+          :{id:f.id,sizeBytes:f.size,quality:f.quality?.quality?.name,videoCodec:f.mediaInfo?.videoCodec??null,audioCodec:f.mediaInfo?.audioCodec??null,audioChannels:f.mediaInfo?.audioChannels??null,resolution:f.mediaInfo?.resolution??null})});
+      }
+      case "radarr_get_movie_releases": {
+        if(!clients.radarr) throw new Error("Radarr not configured");
+        const v=args as {movieId:number;limit?:number;offset?:number};
+        if(!Number.isSafeInteger(v?.movieId)||v.movieId<=0) return textError("Invalid movieId");
+        const limit=v.limit??25,offset=v.offset??0;
+        if(!Number.isSafeInteger(limit)||limit<1||limit>100||!Number.isSafeInteger(offset)||offset<0)return textError("Invalid pagination");
+        const all=await clients.radarr.getMovieReleases(v.movieId),page=all.slice(offset,offset+limit);
+        return jsonText({movieId:v.movieId,total:all.length,offset,returned:page.length,hasMore:offset+page.length<all.length,releases:page.map(x=>({title:x.title??null,guid:x.guid??null,indexerId:x.indexerId??null,sizeBytes:x.size??null,quality:x.quality?.quality?.name??null,resolution:x.quality?.quality?.resolution??null,indexer:x.indexer??null,protocol:x.protocol??null,rejected:x.rejected??false,rejections:x.rejections??[],customFormatScore:x.customFormatScore??null,seeders:x.seeders??null,leechers:x.leechers??null,ageDays:x.age??null,downloadAllowed:x.downloadAllowed??null}))});
+      }
+      case "radarr_grab_release": {
+        if(!clients.radarr) throw new Error("Radarr not configured");
+        const v=args as {movieId:number;indexerId:number;guid:string;confirmed:boolean};
+        if(!Number.isSafeInteger(v?.movieId)||v.movieId<=0||!Number.isSafeInteger(v?.indexerId)||v.indexerId<=0||typeof v?.guid!=="string"||!v.guid.trim()||v.guid.length>2048)return textError("Invalid movieId, indexerId or guid");
+        if(v.confirmed!==true)return textError("Explicit user approval required");
+        const result=await clients.radarr.grabMovieRelease(v.movieId,v.indexerId,v.guid);
+        return jsonText({grabbed:true,movieId:v.movieId,result});
+      }
       case "radarr_get_movies": {
         if (!clients.radarr) throw new Error("Radarr not configured");
         const { limit = 25, offset = 0, search } = args as {
