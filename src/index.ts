@@ -339,6 +339,20 @@ if (clients.sonarr) {
       },
     },
     {
+      name: "sonarr_grab_release",
+      description: "Manually grab one specifically approved Sonarr release, including releases rejected for preference reasons. Causes a download; call only after user explicitly approves the exact release. Revalidates release against current interactive search.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          episodeId: { type: "number", description: "Sonarr episode ID" },
+          indexerId: { type: "number", description: "Indexer ID returned by sonarr_get_episode_releases" },
+          guid: { type: "string", description: "Exact release GUID returned by sonarr_get_episode_releases" },
+          confirmed: { type: "boolean", description: "True only after the user approves grabbing this exact release" },
+        },
+        required: ["episodeId", "indexerId", "guid", "confirmed"],
+      },
+    },
+    {
       name: "sonarr_search_missing",
       description: "Trigger a search for all missing episodes in a series",
       inputSchema: {
@@ -1752,6 +1766,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           nextOffset: offset + page.length < releases.length ? offset + page.length : null,
           releases: page.map(release => ({
             title: release.title ?? null,
+            guid: release.guid ?? null,
+            indexerId: release.indexerId ?? null,
             sizeBytes: release.size ?? null,
             quality: release.quality?.quality?.name ?? null,
             resolution: release.quality?.quality?.resolution ?? null,
@@ -1767,6 +1783,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             downloadAllowed: release.downloadAllowed ?? null,
           })),
         });
+      }
+
+      case "sonarr_grab_release": {
+        if (!clients.sonarr) throw new Error("Sonarr not configured");
+        const input = args as { episodeId: number; indexerId: number; guid: string; confirmed: boolean };
+        if (!Number.isSafeInteger(input?.episodeId) || input.episodeId <= 0 ||
+            !Number.isSafeInteger(input?.indexerId) || input.indexerId <= 0 ||
+            typeof input?.guid !== "string" || !input.guid.trim() || input.guid.length > 2048) {
+          return textError("Valid episodeId, indexerId and release guid are required");
+        }
+        if (input.confirmed !== true) {
+          return textError("Explicit user approval is required before grabbing a release");
+        }
+        const result = await clients.sonarr.grabEpisodeRelease(input.episodeId, input.indexerId, input.guid);
+        return jsonText({ grabbed: true, episodeId: input.episodeId, result });
       }
 
       case "sonarr_search_missing": {
