@@ -312,6 +312,19 @@ if (clients.sonarr) {
       },
     },
     {
+      name: "sonarr_get_episode_files",
+      description: "Get read-only Sonarr episode-file metadata, size, quality and available MediaInfo for one series. Paginated; no file scanning.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          seriesId: { type: "number", description: "Sonarr series ID" },
+          limit: { type: "number", description: "Maximum records (default 25, max 100)" },
+          offset: { type: "number", description: "Records to skip (default 0)" },
+        },
+        required: ["seriesId"],
+      },
+    },
+    {
       name: "sonarr_search_missing",
       description: "Trigger a search for all missing episodes in a series",
       inputSchema: {
@@ -1650,6 +1663,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }, null, 2),
           }],
         };
+      }
+
+      case "sonarr_get_episode_files": {
+        if (!clients.sonarr) throw new Error("Sonarr not configured");
+        const input = args as { seriesId: number; limit?: number; offset?: number };
+        if (!Number.isSafeInteger(input?.seriesId) || input.seriesId <= 0) {
+          return textError("seriesId must be a positive integer");
+        }
+        const limit = input.limit === undefined ? 25 : input.limit;
+        const offset = input.offset === undefined ? 0 : input.offset;
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+            !Number.isSafeInteger(offset) || offset < 0) {
+          return textError("limit must be 1-100 and offset must be a non-negative integer");
+        }
+        const files = await clients.sonarr.getEpisodeFiles(input.seriesId);
+        const page = files.slice(offset, offset + limit);
+        return jsonText({
+          seriesId: input.seriesId,
+          total: files.length,
+          returned: page.length,
+          offset,
+          limit,
+          hasMore: offset + page.length < files.length,
+          nextOffset: offset + page.length < files.length ? offset + page.length : null,
+          files: page.map(f => ({
+            id: f.id,
+            seasonNumber: f.seasonNumber,
+            relativePath: f.relativePath,
+            sizeBytes: f.size,
+            sceneName: f.sceneName,
+            releaseGroup: f.releaseGroup,
+            quality: f.quality?.quality?.name,
+            resolution: f.quality?.quality?.resolution,
+            mediaInfo: f.mediaInfo ?? null,
+          })),
+        });
       }
 
       case "sonarr_search_missing": {
