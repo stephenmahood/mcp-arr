@@ -110,6 +110,8 @@ export interface Episode {
 }
 
 export interface SonarrRelease {
+  guid?: string;
+  indexerId?: number;
   title?: string;
   size?: number;
   indexer?: string;
@@ -657,6 +659,21 @@ export class SonarrClient extends ArrClient {
    */
   async getEpisodeReleases(episodeId: number): Promise<SonarrRelease[]> {
     return this['request']<SonarrRelease[]>(`/release?episodeId=${episodeId}`);
+  }
+
+  /**
+   * Manually grab an exact indexer release. Re-check availability against the
+   * episode's interactive results before posting to Sonarr.
+   */
+  async grabEpisodeRelease(episodeId: number, indexerId: number, guid: string): Promise<unknown> {
+    const releases = await this.getEpisodeReleases(episodeId);
+    const release = releases.find(r => r.indexerId === indexerId && r.guid === guid);
+    if (!release) throw new Error("Selected release is no longer available for this episode");
+    if (release.downloadAllowed === false) throw new Error("Sonarr reports that this release cannot be downloaded");
+    return this['request']<unknown>('/release', {
+      method: 'POST',
+      body: JSON.stringify({ guid, indexerId }),
+    });
   }
 
   /**
