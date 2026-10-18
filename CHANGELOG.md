@@ -1,3 +1,9 @@
+## [1.7.3-custom.9] - 2026-10-18
+
+- Publish cumulative size-limit, quality-profile layout and custom-format editing tools.
+- Includes previews, validation, revision guards for layouts/formats, rollback data and read-back verification.
+- No direct TRaSH import tool.
+
 ## Unreleased — profile layout and custom formats
 
 - Add full profile configuration reads and revision-guarded allowed-quality/order/cutoff/rename tools for Sonarr and Radarr.
