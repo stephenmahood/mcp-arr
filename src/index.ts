@@ -388,6 +388,24 @@ if (clients.sonarr) {
         required: ["profileId"],
       },
     })),
+    ...(["sonarr", "radarr"] as const).flatMap((service): Tool[] => ([
+      {
+        name: `${service}_get_quality_definitions`,
+        description: "Read raw quality definitions, including IDs and nullable size limits in MB/min. No mutations.",
+        inputSchema: {type: "object" as const, properties: {}, additionalProperties: false},
+      },
+      {
+        name: `${service}_update_quality_definition`,
+        description: "Preview one size-limit update (default), or apply=true to persist. Requires exact quality name and all three limits in MB/min. Null preferred/maximum means unlimited. Returns original rollback data and read-back verification. Does not search or alter profiles. After uncertain errors read definitions before retrying.",
+        inputSchema: {type: "object" as const, additionalProperties: false, properties: {
+          definitionId: {type: "integer", minimum: 1}, expectedQuality: {type: "string", minLength: 1},
+          minSize: {type: "number", minimum: 0, maximum: 2000},
+          preferredSize: {type: ["number", "null"], minimum: 0, maximum: 2000},
+          maxSize: {type: ["number", "null"], minimum: 0, maximum: 2000},
+          apply: {type: "boolean", default: false},
+        }, required: ["definitionId", "expectedQuality", "minSize", "preferredSize", "maxSize"]},
+      },
+    ])),
     {
       name: "sonarr_search_missing",
       description: "Trigger a search for all missing episodes in a series",
@@ -1597,8 +1615,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           qualityDefinitions: qualityDefinitions.map(d => ({
             quality: d.quality.name,
             minSize: d.minSize + ' MB/min',
-            maxSize: d.maxSize === 0 ? 'unlimited' : d.maxSize + ' MB/min',
-            preferredSize: d.preferredSize + ' MB/min',
+            maxSize: d.maxSize == null ? 'unlimited' : d.maxSize + ' MB/min',
+            preferredSize: d.preferredSize == null ? 'unlimited' : d.preferredSize + ' MB/min',
           })),
           downloadClients: downloadClients.map(c => ({
             name: c.name,
@@ -1866,6 +1884,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             input.specifications.length > 20 || input.specifications.some(v => !v || typeof v !== "object" || Array.isArray(v)) ||
             (input.apply !== undefined && typeof input.apply !== "boolean")) return textError("Invalid custom format");
         return jsonText(await client.createCustomFormat({name: input.name, specifications: input.specifications}, input.apply === true));
+      }
+
+      case "sonarr_get_quality_definitions":
+      case "radarr_get_quality_definitions": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        const definitions = await client.getQualityDefinitions();
+        return jsonText(definitions.map(d => ({...d, maxSize: d.maxSize ?? null, preferredSize: d.preferredSize ?? null})));
+      }
+      case "sonarr_update_quality_definition":
+      case "radarr_update_quality_definition": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        return jsonText(await client.patchQualityDefinition(args as Parameters<typeof client.patchQualityDefinition>[0]));
       }
 
       case "sonarr_update_quality_profile":

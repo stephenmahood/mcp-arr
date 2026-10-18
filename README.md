@@ -426,3 +426,9 @@ MIT - see [LICENSE](LICENSE) for details.
 - [Sonarr API Docs](https://sonarr.tv/docs/api/)
 - [Model Context Protocol](https://modelcontextprotocol.io)
 - [GitHub Repository](https://github.com/aplaceforallmystuff/mcp-arr)
+
+### Quality size definitions
+
+`sonarr_get_quality_definitions` and `radarr_get_quality_definitions` return raw IDs and size limits in MB/min, with null for unlimited maximum/preferred values.
+
+`sonarr_update_quality_definition` and `radarr_update_quality_definition` accept `definitionId`, `expectedQuality`, `minSize`, `preferredSize`, and `maxSize`. They preview by default; `apply: true` writes one definition and reads it back. Results include the original record for rollback and a `verified` flag. All three limits must be explicit; null is permitted only for preferred/maximum. Finite limits must be ordered and between 0 and 2000. No profile changes or searches are triggered. After an uncertain write or verification failure, read current definitions before deciding whether to retry. Limits are global to each quality, not per quality profile.

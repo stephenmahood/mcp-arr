@@ -308,8 +308,8 @@ export interface QualityDefinition {
   title: string;
   weight: number;
   minSize: number;
-  maxSize: number;
-  preferredSize: number;
+  maxSize?: number | null;
+  preferredSize?: number | null;
 }
 
 export interface DownloadClient {
@@ -555,6 +555,39 @@ export class ArrClient {
     if (!apply) return { applied: false, original, proposed };
     const updated = await this.request<QualityProfile>(`/qualityprofile/${id}`, {method: 'PUT', body: JSON.stringify(proposed)});
     return { applied: true, original, updated };
+  }
+
+  /** Patch one size definition; return rollback data and verify persisted values. */
+  async patchQualityDefinition(input: {
+    definitionId: number; expectedQuality: string; minSize: number;
+    preferredSize: number | null; maxSize: number | null; apply?: boolean;
+  }): Promise<unknown> {
+    const validSize = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 2000;
+    if (!input || !Number.isSafeInteger(input.definitionId) || input.definitionId <= 0 ||
+        typeof input.expectedQuality !== 'string' || !input.expectedQuality.trim() ||
+        !validSize(input.minSize) ||
+        (input.preferredSize !== null && !validSize(input.preferredSize)) ||
+        (input.maxSize !== null && !validSize(input.maxSize)) ||
+        (input.apply !== undefined && typeof input.apply !== 'boolean') ||
+        (input.maxSize !== null && (input.minSize > input.maxSize || input.preferredSize === null || input.preferredSize > input.maxSize)) ||
+        (input.preferredSize !== null && input.preferredSize < input.minSize)) {
+      throw new Error('Invalid size definition: require 0 <= minimum <= preferred <= maximum, or null for unlimited');
+    }
+    const original = (await this.getQualityDefinitions()).find(d => d.id === input.definitionId);
+    if (!original || original.quality.name !== input.expectedQuality) throw new Error('Quality definition identity mismatch');
+    const proposed = { ...original, minSize: input.minSize, preferredSize: input.preferredSize, maxSize: input.maxSize };
+    if (input.apply !== true) return { applied: false, original, proposed };
+    try {
+      await this.request(`/qualitydefinition/${input.definitionId}`, {method: 'PUT', body: JSON.stringify(proposed)});
+    } catch {
+      throw new Error('Quality definition update outcome uncertain; read definitions before retrying');
+    }
+    const updated = (await this.getQualityDefinitions()).find(d => d.id === input.definitionId);
+    const verified = updated?.quality.name === input.expectedQuality &&
+      updated.minSize === proposed.minSize &&
+      (updated.preferredSize ?? null) === proposed.preferredSize &&
+      (updated.maxSize ?? null) === proposed.maxSize;
+    return { applied: true, verified, original, proposed, updated };
   }
 
   /**

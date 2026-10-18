@@ -1,3 +1,8 @@
+## Unreleased — quality size limits
+
+- Add raw Sonarr/Radarr quality-definition reads and previewable, identity-checked size updates with rollback data and read-back verification.
+- Render absent/null upper limits as unlimited in setup reviews instead of undefined; preserve zero as a numeric limit.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
