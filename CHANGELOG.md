@@ -1,3 +1,9 @@
+## Unreleased — profile layout and custom formats
+
+- Add full profile configuration reads and revision-guarded allowed-quality/order/cutoff/rename tools for Sonarr and Radarr.
+- Add explicit custom-format create/update tools supporting up to 250 specifications, with preview revisions, identity checks, duplicate protection and read-back verification. No direct TRaSH import.
+- Preserve unrelated profile configuration, groups and custom-format scores.
+
 ## Unreleased — quality size limits
 
 - Add raw Sonarr/Radarr quality-definition reads and previewable, identity-checked size updates with rollback data and read-back verification.

@@ -389,6 +389,21 @@ if (clients.sonarr) {
       },
     })),
     ...(["sonarr", "radarr"] as const).flatMap((service): Tool[] => ([
+      {name: `${service}_get_quality_profile_config`, description: "Read complete profile configuration and revision for guarded layout changes.", inputSchema: {type:"object", additionalProperties:false, properties:{profileId:{type:"integer",minimum:1}}, required:["profileId"]}},
+      {name: `${service}_set_quality_profile_layout`, description: "Preview allowed qualities, top-level quality ordering, cutoff and optional rename. orderedItemIds must contain every existing top-level quality/group ID once, in API order (lowest to highest). allowedQualityIds contains leaf quality IDs. Preserves existing groups and all unrelated settings. Apply requires expectedRevision from preview. No searches or file operations.", inputSchema: {type:"object", additionalProperties:false, properties:{
+        profileId:{type:"integer",minimum:1}, expectedName:{type:"string",minLength:1},
+        allowedQualityIds:{type:"array",minItems:1,maxItems:100,uniqueItems:true,items:{type:"integer",minimum:0}},
+        orderedItemIds:{type:"array",minItems:1,maxItems:100,uniqueItems:true,items:{type:"integer",minimum:0}},
+        cutoff:{type:"integer",minimum:0},newName:{type:"string",minLength:1,maxLength:100},
+        apply:{type:"boolean",default:false},expectedRevision:{type:"string"}
+      },required:["profileId","expectedName","allowedQualityIds","orderedItemIds","cutoff"]}},
+      {name: `${service}_upsert_custom_format`, description: "Preview creation or replacement of one custom format with up to 250 native specifications. Updates require exact formatId/name. Apply requires expectedRevision from preview; read back after uncertain writes. Returns original rollback data and verification. Does not change profile scores or search. No TRaSH fetching/importing.", inputSchema: {type:"object",additionalProperties:false,properties:{
+        name:{type:"string",minLength:1,maxLength:100},formatId:{type:"integer",minimum:1},
+        specifications:{type:"array",minItems:1,maxItems:250,items:{type:"object",additionalProperties:true}},
+        includeCustomFormatWhenRenaming:{type:"boolean"},apply:{type:"boolean",default:false},expectedRevision:{type:"string"}
+      },required:["name","specifications"]}}
+    ])),
+    ...(["sonarr", "radarr"] as const).flatMap((service): Tool[] => ([
       {
         name: `${service}_get_quality_definitions`,
         description: "Read raw quality definitions, including IDs and nullable size limits in MB/min. No mutations.",
@@ -1884,6 +1899,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             input.specifications.length > 20 || input.specifications.some(v => !v || typeof v !== "object" || Array.isArray(v)) ||
             (input.apply !== undefined && typeof input.apply !== "boolean")) return textError("Invalid custom format");
         return jsonText(await client.createCustomFormat({name: input.name, specifications: input.specifications}, input.apply === true));
+      }
+
+      case "sonarr_get_quality_profile_config":
+      case "radarr_get_quality_profile_config": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        return jsonText(await client.getQualityProfileConfig((args as {profileId:number})?.profileId));
+      }
+      case "sonarr_set_quality_profile_layout":
+      case "radarr_set_quality_profile_layout": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        return jsonText(await client.setQualityProfileLayout(args as Parameters<typeof client.setQualityProfileLayout>[0]));
+      }
+      case "sonarr_upsert_custom_format":
+      case "radarr_upsert_custom_format": {
+        const client = name.startsWith("sonarr_") ? clients.sonarr : clients.radarr;
+        if (!client) throw new Error("Service not configured");
+        return jsonText(await client.upsertCustomFormat(args as Parameters<typeof client.upsertCustomFormat>[0]));
       }
 
       case "sonarr_get_quality_definitions":

@@ -1,3 +1,10 @@
+import { createHash } from 'node:crypto';
+
+function revisionOf(value: unknown): string {
+  const stable = (v: unknown): unknown => Array.isArray(v) ? v.map(stable) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([a],[b]) => a.localeCompare(b)).map(([k,x]) => [k,stable(x)])) : v;
+  return createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
+}
+
 /**
  * *arr Suite API Client
  *
@@ -518,6 +525,89 @@ export class ArrClient {
    */
   async getQualityProfiles(): Promise<QualityProfile[]> {
     return this.request<QualityProfile[]>('/qualityprofile');
+  }
+
+  async getQualityProfileConfig(profileId: number): Promise<{profile: QualityProfile; revision: string}> {
+    if (!Number.isSafeInteger(profileId) || profileId <= 0) throw new Error('Invalid profile ID');
+    const profile = await this.request<QualityProfile>(`/qualityprofile/${profileId}`);
+    if (profile.id !== profileId) throw new Error('Profile identity mismatch');
+    return {profile, revision: revisionOf(profile)};
+  }
+
+  async setQualityProfileLayout(input: {
+    profileId: number; expectedName: string; allowedQualityIds: number[];
+    orderedItemIds: number[]; cutoff: number; newName?: string;
+    expectedRevision?: string; apply?: boolean;
+  }): Promise<unknown> {
+    const validIds = (v: unknown): v is number[] => Array.isArray(v) && v.length > 0 &&
+      v.length <= 100 && v.every(x => Number.isSafeInteger(x) && x >= 0) && new Set(v).size === v.length;
+    if (!input || !validIds(input.allowedQualityIds) || !validIds(input.orderedItemIds) ||
+        !Number.isSafeInteger(input.cutoff) || input.cutoff < 0 ||
+        typeof input.expectedName !== 'string' || !input.expectedName.trim() ||
+        (input.newName !== undefined && (typeof input.newName !== 'string' || !input.newName.trim() || input.newName.length > 100)) ||
+        (input.apply !== undefined && typeof input.apply !== 'boolean')) throw new Error('Invalid profile layout');
+    const {profile: original, revision} = await this.getQualityProfileConfig(input.profileId);
+    if (original.name !== input.expectedName) throw new Error('Profile identity mismatch');
+    if (input.apply && input.expectedRevision !== revision) throw new Error('Profile changed or preview revision missing; preview again');
+    const itemId = (item: QualityProfile['items'][number]) => item.quality?.id ?? item.id;
+    const currentIds = original.items.map(itemId);
+    if (currentIds.some(id => id === undefined) || input.orderedItemIds.length !== currentIds.length ||
+        input.orderedItemIds.some(id => !currentIds.includes(id))) throw new Error('Order must contain every existing top-level item exactly once');
+    const leafIds = original.items.flatMap(item => item.quality ? [item.quality.id] : (item.items ?? []).map(c => c.quality.id));
+    if (input.allowedQualityIds.some(id => !leafIds.includes(id))) throw new Error('Unknown quality ID');
+    const proposed: QualityProfile = structuredClone(original);
+    for (const item of proposed.items) {
+      if (item.quality) item.allowed = input.allowedQualityIds.includes(item.quality.id);
+      else {
+        for (const child of item.items ?? []) Object.assign(child, {allowed: input.allowedQualityIds.includes(child.quality.id)});
+        item.allowed = (item.items ?? []).some(c => input.allowedQualityIds.includes(c.quality.id));
+      }
+    }
+    proposed.items = input.orderedItemIds.map(id => proposed.items.find(item => itemId(item) === id)!);
+    if (!proposed.items.some(item => itemId(item) === input.cutoff && item.allowed)) throw new Error('Cutoff must identify an enabled top-level quality or group');
+    proposed.cutoff = input.cutoff;
+    if (input.newName !== undefined) proposed.name = input.newName.trim();
+    if (proposed.name !== original.name && (await this.getQualityProfiles()).some(p => p.id !== input.profileId && p.name.toLowerCase() === proposed.name.toLowerCase())) throw new Error('Profile name already exists');
+    if (!input.apply) return {applied: false, original, proposed, revision};
+    try { await this.request(`/qualityprofile/${input.profileId}`, {method:'PUT', body:JSON.stringify(proposed)}); }
+    catch { throw new Error('Profile update outcome uncertain; read current profile before retrying'); }
+    const {profile: updated} = await this.getQualityProfileConfig(input.profileId);
+    return {applied: true, verified: revisionOf(updated) === revisionOf(proposed), original, proposed, updated};
+  }
+
+  async upsertCustomFormat(input: {
+    name: string; specifications: Array<Record<string, unknown>>; formatId?: number;
+    includeCustomFormatWhenRenaming?: boolean; expectedRevision?: string; apply?: boolean;
+  }): Promise<unknown> {
+    if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 100 ||
+        !Array.isArray(input.specifications) || !input.specifications.length || input.specifications.length > 250 ||
+        input.specifications.some(s => !s || typeof s !== 'object' || Array.isArray(s) ||
+          typeof s.name !== 'string' || !s.name.trim() || typeof s.implementation !== 'string' ||
+          typeof s.negate !== 'boolean' || typeof s.required !== 'boolean' ||
+          !Array.isArray(s.fields) || s.fields.some((f: unknown) => !f || typeof f !== 'object' || typeof (f as {name?:unknown}).name !== 'string' || !Object.prototype.hasOwnProperty.call(f, 'value'))) ||
+        (input.formatId !== undefined && (!Number.isSafeInteger(input.formatId) || input.formatId <= 0)) ||
+        (input.apply !== undefined && typeof input.apply !== 'boolean') ||
+        (input.includeCustomFormatWhenRenaming !== undefined && typeof input.includeCustomFormatWhenRenaming !== 'boolean')) throw new Error('Invalid custom format definition');
+    const formats = await this.getCustomFormats();
+    const original = input.formatId === undefined ? null : formats.find(f => f.id === input.formatId);
+    if (input.formatId !== undefined && (!original || original.name !== input.name)) throw new Error('Custom format identity mismatch');
+    if (formats.some(f => f.id !== input.formatId && f.name.toLowerCase() === input.name.toLowerCase())) throw new Error('Custom format name already exists; inspect and use its ID to update');
+    const revision = revisionOf(original ?? null);
+    if (input.apply && input.expectedRevision !== revision) throw new Error('Custom format changed or preview revision missing; preview again');
+    const proposed = {...original, name:input.name, specifications:input.specifications,
+      includeCustomFormatWhenRenaming: input.includeCustomFormatWhenRenaming ?? original?.includeCustomFormatWhenRenaming ?? false};
+    if (!input.apply) return {applied:false, original:original ?? null, proposed, revision};
+    let saved: {id:number};
+    try { saved = await this.request(input.formatId === undefined ? '/customformat' : `/customformat/${input.formatId}`, {method:input.formatId === undefined ? 'POST':'PUT',body:JSON.stringify(proposed)}); }
+    catch { throw new Error('Custom format write outcome uncertain; inspect formats before retrying'); }
+    const updated = (await this.getCustomFormats()).find(f => f.id === saved.id);
+    // The server adds field metadata; compare only caller-supplied definition keys.
+    const contains = (actual: unknown, expected: unknown): boolean => {
+      if (Array.isArray(expected)) return Array.isArray(actual) && actual.length === expected.length && expected.every((v,i) => contains(actual[i],v));
+      if (expected && typeof expected === 'object') return !!actual && typeof actual === 'object' && Object.entries(expected).every(([k,v]) => contains((actual as Record<string,unknown>)[k],v));
+      return actual === expected;
+    };
+    return {applied:true, verified:contains(updated,proposed), original:original ?? null, proposed, updated};
   }
 
   async getCustomFormats(): Promise<Array<Record<string, unknown> & {id: number; name: string}>> {

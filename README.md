@@ -432,3 +432,13 @@ MIT - see [LICENSE](LICENSE) for details.
 `sonarr_get_quality_definitions` and `radarr_get_quality_definitions` return raw IDs and size limits in MB/min, with null for unlimited maximum/preferred values.
 
 `sonarr_update_quality_definition` and `radarr_update_quality_definition` accept `definitionId`, `expectedQuality`, `minSize`, `preferredSize`, and `maxSize`. They preview by default; `apply: true` writes one definition and reads it back. Results include the original record for rollback and a `verified` flag. All three limits must be explicit; null is permitted only for preferred/maximum. Finite limits must be ordered and between 0 and 2000. No profile changes or searches are triggered. After an uncertain write or verification failure, read current definitions before deciding whether to retry. Limits are global to each quality, not per quality profile.
+
+### Profile layout and explicit custom-format editing
+
+Both Sonarr and Radarr expose these tools:
+
+- `{service}_get_quality_profile_config`: returns the full profile and a revision token.
+- `{service}_set_quality_profile_layout`: previews allowed leaf quality IDs, a complete top-level quality/group order (API order: lowest to highest), an enabled cutoff, and an optional rename. Existing groups, language, custom-format scores and upgrade settings are preserved.
+- `{service}_upsert_custom_format`: previews creation or exact-ID/name replacement of an explicitly supplied native definition, supporting up to 250 specifications. It does not fetch or import TRaSH data, change profile scores, or trigger searches.
+
+For both write tools, preview first, inspect `original` and `proposed`, then pass `apply: true` and the returned `expectedRevision`. Changed local state rejects the apply. Writes return read-back verification and original rollback data. After uncertain submission, inspect current state before retrying. Quality grouping itself is preserved, not editable. Profile-layout changes do not reassign movies/series or create profiles. Custom format changes affect all profiles already referencing that format; scores remain unchanged.
