@@ -1,8 +1,8 @@
-name: Publish MCP-ARR 1.7.3-custom.7
+name: Publish MCP-ARR 1.7.3-custom.8
 on:
   push:
     branches:
-      - feature/radarr-release-inspection
+      - feature/manual-import
     paths:
       - 'src/**'
       - 'Dockerfile'
@@ -34,4 +34,4 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64
-          tags: ghcr.io/stephenmahood/mcp-arr:1.7.3-custom.7
+          tags: ghcr.io/stephenmahood/mcp-arr:1.7.3-custom.8

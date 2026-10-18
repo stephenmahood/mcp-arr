@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — custom.8
+- Radarr manual-import candidate inspection and guarded exact-file import via the ManualImport command, plus command-status lookup.
+- Fresh pre-import validation of file size, movie mapping, quality/languages, and explicit rejection acknowledgements. Import submission is distinguished from successful import; existing files may be replaced by Radarr.
+- Queue responses now include warning details, download IDs, output paths and byte counts.
+- Manual-import regression tests. Existing custom release, metadata and profile tools retained.
+
 ## [1.7.3] - 2026-07-29
 
 ### Fixed

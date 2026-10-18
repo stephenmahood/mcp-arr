@@ -300,7 +300,10 @@ The existing service-specific tools remain available for richer local or power-u
 | `radarr_add_movie` | Add a movie to Radarr (supports tags) |
 | `radarr_get_root_folders` | Get available root folders for adding movies |
 | `radarr_get_quality_profiles` | Get available quality profiles for adding movies |
-| `radarr_get_queue` | View current download queue with `limit` and `offset` pagination |
+| `radarr_get_queue` | View paginated queue, warning messages, download ID, output path and byte counts |
+| `radarr_get_manual_import_candidates` | Inspect a completed download by `folder` or `downloadId`; returns parsed metadata and rejection reasons without importing |
+| `radarr_manual_import` | Import exact inspected files with `confirmed: true`, explicit `importMode` (`auto`, `copy`, `move`), and `files` containing `path`, `movieId`, `expectedSizeBytes`, and any exact `acknowledgedRejections` |
+| `radarr_get_command` | Read import command status using `commandId`; verify movie files after completion |
 | `radarr_get_calendar` | See upcoming releases |
 | `radarr_search_movie` | Trigger search to download a movie in your library |
 | `radarr_search_movies` | Bulk-trigger searches for multiple movie IDs at once |
