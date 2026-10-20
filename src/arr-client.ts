@@ -467,6 +467,11 @@ export class ArrClient {
       throw new Error(`${this.serviceName} API error: ${response.status} ${response.statusText} - ${text}`);
     }
 
+    // Queue DELETE endpoints can return 200 with no body or 204.
+    if (options.method === 'DELETE') {
+      const body = await response.text();
+      return (body.trim() ? JSON.parse(body) : undefined) as T;
+    }
     return response.json() as Promise<T>;
   }
 
@@ -488,6 +493,28 @@ export class ArrClient {
       pageSize: String(pageSize),
     });
     return this.request<{ records: QueueItem[]; totalRecords: number }>(`/queue?${params.toString()}`);
+  }
+
+  /** Remove a queue item through *arr, optionally deleting the client download/data. */
+  async deleteQueueItem(queueId: number, options: { removeFromClient?: boolean; blocklist?: boolean; skipRedownload?: boolean } = {}): Promise<void> {
+    if (!Number.isSafeInteger(queueId) || queueId <= 0) {
+      throw new Error('queueId must be a positive safe integer from the download queue');
+    }
+    const { removeFromClient = true, blocklist = false, skipRedownload = false } = options;
+    for (const [name, value] of Object.entries({ removeFromClient, blocklist, skipRedownload })) {
+      if (typeof value !== 'boolean') throw new Error(`${name} must be a boolean`);
+    }
+    // Explicit false matters: the API defaults removeFromClient to true.
+    const params = new URLSearchParams({
+      removeFromClient: String(removeFromClient),
+      blocklist: String(blocklist),
+      skipRedownload: String(skipRedownload),
+    });
+    try {
+      await this.request<void>(`/queue/${queueId}?${params}`, { method: 'DELETE' });
+    } catch {
+      throw new Error(`${this.serviceName} queue deletion was not confirmed. Check the queue and download client before retrying; the item may already have been removed.`);
+    }
   }
 
   /**
@@ -1041,19 +1068,6 @@ export class RadarrClient extends ArrClient {
     return this['request']<Movie>(`/movie/${movie.id}`, {
       method: 'PUT',
       body: JSON.stringify(movie),
-    });
-  }
-
-  /**
-   * Delete an item from the download queue
-   */
-  async deleteQueueItem(queueId: number, options: { removeFromClient?: boolean; blocklist?: boolean } = {}): Promise<void> {
-    const params = new URLSearchParams();
-    if (options.removeFromClient) params.append('removeFromClient', 'true');
-    if (options.blocklist) params.append('blocklist', 'true');
-    const query = params.toString() ? `?${params.toString()}` : '';
-    await this['request']<void>(`/queue/${queueId}${query}`, {
-      method: 'DELETE',
     });
   }
 

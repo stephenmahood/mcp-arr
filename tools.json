@@ -19,7 +19,9 @@
           "description": "Natural-language search query"
         }
       },
-      "required": ["query"]
+      "required": [
+        "query"
+      ]
     }
   },
   {
@@ -33,7 +35,9 @@
           "description": "Opaque result id returned by search"
         }
       },
-      "required": ["id"]
+      "required": [
+        "id"
+      ]
     }
   },
   {
@@ -47,7 +51,9 @@
           "description": "Search term"
         }
       },
-      "required": ["term"]
+      "required": [
+        "term"
+      ]
     }
   },
   {
@@ -70,7 +76,9 @@
           "description": "Search term (show name)"
         }
       },
-      "required": ["term"]
+      "required": [
+        "term"
+      ]
     }
   },
   {
@@ -89,6 +97,40 @@
         }
       },
       "required": []
+    }
+  },
+  {
+    "name": "sonarr_delete_queue_item",
+    "description": "Remove an item from the Sonarr download queue. Use sonarr_get_queue to find queue item IDs. Removing from the client also deletes its download data. For season packs this removes the whole download. Does not delete imported library files. Can optionally blocklist the release.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "queueId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Queue item ID (from sonarr_get_queue)"
+        },
+        "removeFromClient": {
+          "type": "boolean",
+          "description": "Also remove from download client (default: true)"
+        },
+        "skipRedownload": {
+          "type": "boolean",
+          "description": "Suppress automatic replacement search when blocklisting (default: false)"
+        },
+        "blocklist": {
+          "type": "boolean",
+          "description": "Add release to blocklist to prevent re-grabbing (default: false)"
+        }
+      },
+      "required": [
+        "queueId"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
     }
   },
   {
@@ -120,7 +162,9 @@
           "description": "Optional: filter to a specific season"
         }
       },
-      "required": ["seriesId"]
+      "required": [
+        "seriesId"
+      ]
     }
   },
   {
@@ -134,7 +178,9 @@
           "description": "Series ID to search for missing episodes"
         }
       },
-      "required": ["seriesId"]
+      "required": [
+        "seriesId"
+      ]
     }
   },
   {
@@ -145,11 +191,15 @@
       "properties": {
         "episodeIds": {
           "type": "array",
-          "items": { "type": "number" },
+          "items": {
+            "type": "number"
+          },
           "description": "Episode ID(s) to search for"
         }
       },
-      "required": ["episodeIds"]
+      "required": [
+        "episodeIds"
+      ]
     }
   },
   {
@@ -235,7 +285,9 @@
           "description": "Search term (movie name)"
         }
       },
-      "required": ["term"]
+      "required": [
+        "term"
+      ]
     }
   },
   {
@@ -254,6 +306,40 @@
         }
       },
       "required": []
+    }
+  },
+  {
+    "name": "radarr_delete_queue_item",
+    "description": "Remove an item from the Radarr download queue. Use radarr_get_queue to find queue item IDs. Removing from the client also deletes its download data. For season packs this removes the whole download. Does not delete imported library files. Can optionally blocklist the release.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "queueId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Queue item ID (from radarr_get_queue)"
+        },
+        "removeFromClient": {
+          "type": "boolean",
+          "description": "Also remove from download client (default: true)"
+        },
+        "skipRedownload": {
+          "type": "boolean",
+          "description": "Suppress automatic replacement search when blocklisting (default: false)"
+        },
+        "blocklist": {
+          "type": "boolean",
+          "description": "Add release to blocklist to prevent re-grabbing (default: false)"
+        }
+      },
+      "required": [
+        "queueId"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
     }
   },
   {
@@ -281,7 +367,9 @@
           "description": "Movie ID to search for"
         }
       },
-      "required": ["movieId"]
+      "required": [
+        "movieId"
+      ]
     }
   },
   {
@@ -367,7 +455,9 @@
           "description": "Search term (artist name)"
         }
       },
-      "required": ["term"]
+      "required": [
+        "term"
+      ]
     }
   },
   {
@@ -399,7 +489,9 @@
           "description": "Artist ID to get albums for"
         }
       },
-      "required": ["artistId"]
+      "required": [
+        "artistId"
+      ]
     }
   },
   {
@@ -413,7 +505,9 @@
           "description": "Album ID to search for"
         }
       },
-      "required": ["albumId"]
+      "required": [
+        "albumId"
+      ]
     }
   },
   {
@@ -427,7 +521,9 @@
           "description": "Artist ID to search missing albums for"
         }
       },
-      "required": ["artistId"]
+      "required": [
+        "artistId"
+      ]
     }
   },
   {
@@ -527,7 +623,9 @@
           "description": "Search query"
         }
       },
-      "required": ["query"]
+      "required": [
+        "query"
+      ]
     }
   },
   {
@@ -556,11 +654,16 @@
       "properties": {
         "service": {
           "type": "string",
-          "enum": ["radarr", "sonarr"],
+          "enum": [
+            "radarr",
+            "sonarr"
+          ],
           "description": "Which service to get profiles for"
         }
       },
-      "required": ["service"]
+      "required": [
+        "service"
+      ]
     }
   },
   {
@@ -571,7 +674,10 @@
       "properties": {
         "service": {
           "type": "string",
-          "enum": ["radarr", "sonarr"],
+          "enum": [
+            "radarr",
+            "sonarr"
+          ],
           "description": "Which service"
         },
         "profile": {
@@ -579,7 +685,10 @@
           "description": "Profile name (e.g., 'remux-web-1080p', 'uhd-bluray-web')"
         }
       },
-      "required": ["service", "profile"]
+      "required": [
+        "service",
+        "profile"
+      ]
     }
   },
   {
@@ -590,7 +699,10 @@
       "properties": {
         "service": {
           "type": "string",
-          "enum": ["radarr", "sonarr"],
+          "enum": [
+            "radarr",
+            "sonarr"
+          ],
           "description": "Which service"
         },
         "category": {
@@ -598,7 +710,9 @@
           "description": "Optional filter: hdr, audio, resolution, source, streaming, anime, unwanted, release, language"
         }
       },
-      "required": ["service"]
+      "required": [
+        "service"
+      ]
     }
   },
   {
@@ -609,16 +723,27 @@
       "properties": {
         "service": {
           "type": "string",
-          "enum": ["radarr", "sonarr"],
+          "enum": [
+            "radarr",
+            "sonarr"
+          ],
           "description": "Which service"
         },
         "mediaServer": {
           "type": "string",
-          "enum": ["plex", "emby", "jellyfin", "standard"],
+          "enum": [
+            "plex",
+            "emby",
+            "jellyfin",
+            "standard"
+          ],
           "description": "Which media server you use"
         }
       },
-      "required": ["service", "mediaServer"]
+      "required": [
+        "service",
+        "mediaServer"
+      ]
     }
   },
   {
@@ -629,7 +754,10 @@
       "properties": {
         "service": {
           "type": "string",
-          "enum": ["radarr", "sonarr"],
+          "enum": [
+            "radarr",
+            "sonarr"
+          ],
           "description": "Which service"
         },
         "type": {
@@ -637,7 +765,9 @@
           "description": "Content type: 'movie', 'anime' for Radarr; 'series', 'anime' for Sonarr"
         }
       },
-      "required": ["service"]
+      "required": [
+        "service"
+      ]
     }
   },
   {
@@ -648,7 +778,10 @@
       "properties": {
         "service": {
           "type": "string",
-          "enum": ["radarr", "sonarr"],
+          "enum": [
+            "radarr",
+            "sonarr"
+          ],
           "description": "Which service"
         },
         "profileId": {
@@ -660,7 +793,11 @@
           "description": "TRaSH profile name to compare against"
         }
       },
-      "required": ["service", "profileId", "trashProfile"]
+      "required": [
+        "service",
+        "profileId",
+        "trashProfile"
+      ]
     }
   },
   {
@@ -671,16 +808,27 @@
       "properties": {
         "service": {
           "type": "string",
-          "enum": ["radarr", "sonarr"],
+          "enum": [
+            "radarr",
+            "sonarr"
+          ],
           "description": "Which service"
         },
         "mediaServer": {
           "type": "string",
-          "enum": ["plex", "emby", "jellyfin", "standard"],
+          "enum": [
+            "plex",
+            "emby",
+            "jellyfin",
+            "standard"
+          ],
           "description": "Which media server you use"
         }
       },
-      "required": ["service", "mediaServer"]
+      "required": [
+        "service",
+        "mediaServer"
+      ]
     }
   }
 ]

@@ -24,6 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.3-custom.10] - 2026-10-20
+
+### Added
+- Sonarr queue deletion, with matching Radarr options for client removal, blocklisting and skipping replacement searches.
+
+### Fixed
+- Queue deletion accepts successful empty responses, explicitly sends false options, validates inputs, and sanitizes uncertain errors without retrying destructive requests.
+
+
 ### Added — custom.8
 - Radarr manual-import candidate inspection and guarded exact-file import via the ManualImport command, plus command-status lookup.
 - Fresh pre-import validation of file size, movie mapping, quality/languages, and explicit rejection acknowledgements. Import submission is distinguished from successful import; existing files may be replaced by Radarr.

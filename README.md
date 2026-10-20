@@ -284,6 +284,7 @@ The existing service-specific tools remain available for richer local or power-u
 | `sonarr_add_series` | Add a TV series to Sonarr (supports tags) |
 | `sonarr_get_root_folders` | Get available root folders for adding series |
 | `sonarr_get_quality_profiles` | Get available quality profiles for adding series |
+| `sonarr_delete_queue_item` | Remove a queue item and its client download/data by default; optional blocklisting |
 | `sonarr_get_queue` | View current download queue with `limit` and `offset` pagination |
 | `sonarr_get_calendar` | See upcoming episodes |
 | `sonarr_get_episodes` | List episodes for a series (shows missing vs available) |
@@ -308,7 +309,7 @@ The existing service-specific tools remain available for richer local or power-u
 | `radarr_search_movie` | Trigger search to download a movie in your library |
 | `radarr_search_movies` | Bulk-trigger searches for multiple movie IDs at once |
 | `radarr_update_movie` | Update a movie's quality profile, monitored status, minimum availability, tags, or path |
-| `radarr_delete_queue_item` | Remove an item from the download queue (optionally blocklist the release) |
+| `radarr_delete_queue_item` | Remove a queue item and its client download/data by default; optional blocklisting |
 | `radarr_refresh_movie` | Trigger a metadata refresh for a specific movie in Radarr |
 
 ### Lidarr Tools (Music)
@@ -442,3 +443,7 @@ Both Sonarr and Radarr expose these tools:
 - `{service}_upsert_custom_format`: previews creation or exact-ID/name replacement of an explicitly supplied native definition, supporting up to 250 specifications. It does not fetch or import TRaSH data, change profile scores, or trigger searches.
 
 For both write tools, preview first, inspect `original` and `proposed`, then pass `apply: true` and the returned `expectedRevision`. Changed local state rejects the apply. Writes return read-back verification and original rollback data. After uncertain submission, inspect current state before retrying. Quality grouping itself is preserved, not editable. Profile-layout changes do not reassign movies/series or create profiles. Custom format changes affect all profiles already referencing that format; scores remain unchanged.
+
+### Queue deletion
+
+Use `sonarr_delete_queue_item` or `radarr_delete_queue_item` with a numeric `queueId` from the corresponding `get_queue` tool (not a movie, episode, or download-client ID). Both accept `removeFromClient` (default `true`), `blocklist` (default `false`), and `skipRedownload` (default `false`; suppresses automatic replacement search when blocklisting). Set `removeFromClient: false` to retain the client download. Client removal also requests deletion of download data, and removing a Sonarr season pack affects the whole download. Imported library files are not targeted. Pending releases have no client download to delete. After an error, check the queue/client before retrying.

@@ -1,8 +1,8 @@
-name: Publish MCP-ARR 1.7.3-custom.9
+name: Publish MCP-ARR 1.7.3-custom.10
 on:
   push:
     branches:
-      - feature/profile-layout-and-formats
+      - feature/queue-deletion
     paths:
       - 'src/**'
       - 'Dockerfile'
@@ -34,4 +34,4 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64
-          tags: ghcr.io/stephenmahood/mcp-arr:1.7.3-custom.9
+          tags: ghcr.io/stephenmahood/mcp-arr:1.7.3-custom.10

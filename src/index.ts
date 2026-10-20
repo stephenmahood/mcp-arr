@@ -280,6 +280,34 @@ if (clients.sonarr) {
       },
     },
     {
+      name: "sonarr_delete_queue_item",
+      description: "Remove an item from the Sonarr download queue. Use sonarr_get_queue to find queue item IDs. Removing from the client also deletes its download data. For season packs this removes the whole download. Does not delete imported library files. Can optionally blocklist the release.",
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          queueId: {
+            type: "integer",
+            minimum: 1,
+            description: "Queue item ID (from sonarr_get_queue)",
+          },
+          removeFromClient: {
+            type: "boolean",
+            description: "Also remove from download client (default: true)",
+          },
+          skipRedownload: {
+            type: "boolean",
+            description: "Suppress automatic replacement search when blocklisting (default: false)",
+          },
+          blocklist: {
+            type: "boolean",
+            description: "Add release to blocklist to prevent re-grabbing (default: false)",
+          },
+        },
+        required: ["queueId"],
+      },
+    },
+    {
       name: "sonarr_get_calendar",
       description: "Get upcoming TV episodes from Sonarr",
       inputSchema: {
@@ -692,17 +720,23 @@ if (clients.radarr) {
     },
     {
       name: "radarr_delete_queue_item",
-      description: "Remove an item from the Radarr download queue. Use radarr_get_queue to find queue item IDs. Can optionally blocklist the release to prevent re-grabbing.",
+      description: "Remove an item from the Radarr download queue. Use radarr_get_queue to find queue item IDs. Removing from the client also deletes its download data. For season packs this removes the whole download. Does not delete imported library files. Can optionally blocklist the release.",
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
       inputSchema: {
         type: "object" as const,
         properties: {
           queueId: {
-            type: "number",
+            type: "integer",
+            minimum: 1,
             description: "Queue item ID (from radarr_get_queue)",
           },
           removeFromClient: {
             type: "boolean",
             description: "Also remove from download client (default: true)",
+          },
+          skipRedownload: {
+            type: "boolean",
+            description: "Suppress automatic replacement search when blocklisting (default: false)",
           },
           blocklist: {
             type: "boolean",
@@ -2268,12 +2302,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "sonarr_delete_queue_item":
       case "radarr_delete_queue_item": {
-        if (!clients.radarr) throw new Error("Radarr not configured");
-        const { queueId, removeFromClient = true, blocklist = false } = args as {
-          queueId: number; removeFromClient?: boolean; blocklist?: boolean;
+        const service = name === "sonarr_delete_queue_item" ? "sonarr" : "radarr";
+        const client = clients[service];
+        if (!client) throw new Error(`${service} not configured`);
+        const { queueId, removeFromClient = true, blocklist = false, skipRedownload = false } = (args ?? {}) as {
+          queueId: number; removeFromClient?: boolean; blocklist?: boolean; skipRedownload?: boolean;
         };
-        await clients.radarr.deleteQueueItem(queueId, { removeFromClient, blocklist });
+        await client.deleteQueueItem(queueId, { removeFromClient, blocklist, skipRedownload });
         return {
           content: [{
             type: "text",
@@ -2283,6 +2320,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               queueId,
               removedFromClient: removeFromClient,
               blocklisted: blocklist,
+              skipRedownload,
             }, null, 2),
           }],
         };
