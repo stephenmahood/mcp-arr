@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/custom-image-1-7-4.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
   workflow_dispatch:
 permissions:
   contents: read
