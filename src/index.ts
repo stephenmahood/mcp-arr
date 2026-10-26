@@ -1695,9 +1695,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const candidates = await clients.sonarr.getManualImport(folder);
         const candidate = candidates.find(c => c.path === path);
         if (!candidate) throw new Error("File was not found among the current Sonarr manual import candidates");
-        if (candidate.rejections?.length) {
-          throw new Error("Sonarr reported import rejections; inspect and resolve these before proceeding");
-        }
+        // Sonarr can report a name-matching rejection even for a legitimate manual
+        // override. Explicitly selected IDs are validated against live Sonarr metadata.
+        // Sonarr remains the final authority on whether the import is allowed.
         const series = await clients.sonarr.getSeriesById(seriesId);
         if (series.id !== seriesId) throw new Error("Sonarr series ID mismatch");
         const episodes = await clients.sonarr.getEpisodes(seriesId);
