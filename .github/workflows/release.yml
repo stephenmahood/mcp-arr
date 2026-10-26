@@ -157,9 +157,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository }}:${{ needs.prepare.outputs.version }}
-            ghcr.io/${{ github.repository }}:${{ needs.prepare.outputs.minor }}
-            ghcr.io/${{ github.repository }}:${{ needs.prepare.outputs.major }}
-            ghcr.io/${{ github.repository }}:latest
+            ${{ !contains(needs.prepare.outputs.version, '-custom.') && format('ghcr.io/{0}:{1}', github.repository, needs.prepare.outputs.minor) || '' }}
+            ${{ !contains(needs.prepare.outputs.version, '-custom.') && format('ghcr.io/{0}:{1}', github.repository, needs.prepare.outputs.major) || '' }}
+            ${{ !contains(needs.prepare.outputs.version, '-custom.') && format('ghcr.io/{0}:latest', github.repository) || '' }}
           labels: |
             org.opencontainers.image.title=mcp-arr
             org.opencontainers.image.description=MCP server for the *arr media management suite
@@ -201,4 +201,4 @@ jobs:
           name: ${{ needs.prepare.outputs.tag }}
           body_path: /tmp/release_notes.md
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(needs.prepare.outputs.version, '-custom.') }}
