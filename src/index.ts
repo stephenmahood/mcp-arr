@@ -280,6 +280,35 @@ if (clients.sonarr) {
       },
     },
     {
+      name: "sonarr_get_failed_imports",
+      description: "List Sonarr queue downloads blocked by import warnings. Read-only; never triggers imports.",
+      inputSchema: { type: "object" as const, properties: {}, required: [] },
+    },
+    {
+      name: "sonarr_analyse_manual_import",
+      description: "Inspect Sonarr-side files for a blocked download and show candidate series/episodes. Read-only. Supply the Sonarr outputPath from the queue.",
+      inputSchema: {
+        type: "object" as const,
+        properties: { folder: { type: "string", description: "Absolute download folder path visible to Sonarr" } },
+        required: ["folder"],
+      },
+    },
+    {
+      name: "sonarr_execute_manual_import",
+      description: "Import a single reviewed Sonarr file using the manual-import API. Requires exact Sonarr-side folder, file path, series ID and episode IDs; checks IDs against Sonarr metadata, then moves the file. Never infer episode numbering.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          folder: { type: "string", description: "Absolute download folder as seen by Sonarr" },
+          path: { type: "string", description: "Exact candidate file path from sonarr_analyse_manual_import" },
+          seriesId: { type: "number", description: "Confirmed Sonarr series ID" },
+          episodeIds: { type: "array", items: { type: "number" }, description: "Confirmed episode IDs from Sonarr, not guessed from release title" },
+          confirm: { type: "boolean", description: "Must be true after reviewing the candidate and episode mapping" },
+        },
+        required: ["folder", "path", "seriesId", "episodeIds", "confirm"],
+      },
+    },
+    {
       name: "sonarr_get_calendar",
       description: "Get upcoming TV episodes from Sonarr",
       inputSchema: {
@@ -1616,6 +1645,69 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "sonarr_get_queue": {
         if (!clients.sonarr) throw new Error("Sonarr not configured");
         return jsonText(await getPaginatedQueue(clients.sonarr, args as { limit?: number; offset?: number }));
+      }
+
+      case "sonarr_get_failed_imports": {
+        if (!clients.sonarr) throw new Error("Sonarr not configured");
+        const records: Record<string, unknown>[] = [];
+        for (let page = 1; page <= 20; page++) {
+          const result = await clients.sonarr.getQueue(page, 100);
+          records.push(...result.records as unknown as Record<string, unknown>[]);
+          if (records.length >= result.totalRecords || result.records.length === 0) break;
+        }
+        const failures = records.filter((record) => {
+          const messages = JSON.stringify(record.statusMessages ?? []).toLowerCase();
+          return record.trackedDownloadStatus === "warning" ||
+            (String(record.status).toLowerCase() === "completed" &&
+              (messages.includes("import") || messages.includes("matched to series by id")));
+        });
+        return jsonText({ scanned: records.length, total: failures.length, records: failures.map(r => ({
+          id: r.id, title: r.title, status: r.status, trackedDownloadStatus: r.trackedDownloadStatus,
+          outputPath: r.outputPath, downloadId: r.downloadId, seriesId: r.seriesId,
+          statusMessages: r.statusMessages,
+        })) });
+      }
+
+      case "sonarr_analyse_manual_import": {
+        if (!clients.sonarr) throw new Error("Sonarr not configured");
+        const { folder } = args as { folder: string };
+        const files = await clients.sonarr.getManualImport(folder);
+        return jsonText({ folder, count: files.length, files: files.map(file => ({
+          path: file.path, name: file.name, series: file.series,
+          episodes: file.episodes, episodeIds: file.episodeIds,
+          quality: file.quality, languages: file.languages, size: file.size,
+          rejections: file.rejections,
+        })) });
+      }
+
+      case "sonarr_execute_manual_import": {
+        if (!clients.sonarr) throw new Error("Sonarr not configured");
+        const { folder, path, seriesId, episodeIds, confirm } = args as {
+          folder: string; path: string; seriesId: number; episodeIds: number[]; confirm: boolean;
+        };
+        if (confirm !== true) throw new Error("Explicit confirmation is required");
+        if (!Number.isSafeInteger(seriesId) || seriesId <= 0 ||
+            !Array.isArray(episodeIds) || episodeIds.length === 0 ||
+            !episodeIds.every(id => Number.isSafeInteger(id) && id > 0) ||
+            new Set(episodeIds).size !== episodeIds.length) {
+          throw new Error("Valid seriesId and nonempty unique episodeIds are required");
+        }
+        const candidates = await clients.sonarr.getManualImport(folder);
+        const candidate = candidates.find(c => c.path === path);
+        if (!candidate) throw new Error("File was not found among the current Sonarr manual import candidates");
+        if (candidate.rejections?.length) {
+          throw new Error("Sonarr reported import rejections; inspect and resolve these before proceeding");
+        }
+        const series = await clients.sonarr.getSeriesById(seriesId);
+        if (series.id !== seriesId) throw new Error("Sonarr series ID mismatch");
+        const episodes = await clients.sonarr.getEpisodes(seriesId);
+        const selected = episodes.filter(ep => episodeIds.includes(ep.id));
+        if (selected.length !== episodeIds.length) throw new Error("Some episode IDs do not belong to the selected series");
+        const file = { ...candidate, series, episodes: selected, episodeIds };
+        const command = await clients.sonarr.executeManualImport([file]);
+        return jsonText({ command, series: { id: series.id, title: series.title },
+          episodes: selected.map(ep => ({ id: ep.id, seasonNumber: ep.seasonNumber,
+            episodeNumber: ep.episodeNumber, title: ep.title })), path });
       }
 
       case "sonarr_get_calendar": {
