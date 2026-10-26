@@ -1,3 +1,12 @@
+## [1.7.4-custom.2] - 2026-10-26
+
+### Added
+- Three Sonarr MCP tools for diagnosing failed automatic imports and performing an explicitly reviewed manual import.
+- Sonarr-side file inspection and episode ID validation before import dispatch.
+
+### Notes
+- Custom prerelease; existing normal release tags are not changed.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
