@@ -547,11 +547,48 @@ export class ArrClient {
   }
 }
 
+/** A Sonarr manual-import candidate, as returned by the Sonarr API. */
+export interface SonarrManualImportFile {
+  path: string;
+  name?: string;
+  series?: { id: number; title?: string };
+  episodes?: Array<{ id: number; seriesId?: number; seasonNumber?: number; episodeNumber?: number }>;
+  episodeIds?: number[];
+  quality?: unknown;
+  languages?: unknown[];
+  language?: unknown;
+  size?: number;
+  rejections?: Array<{ reason?: string; type?: string }>;
+  [key: string]: unknown;
+}
+
 // Service-specific clients
 
 export class SonarrClient extends ArrClient {
   constructor(config: ArrConfig) {
     super('sonarr', config);
+  }
+
+  /** Sonarr queue records, including import-blocked downloads. */
+  async getQueueDetails(): Promise<Array<Record<string, unknown>>> {
+    return this['request']<Array<Record<string, unknown>>>('/queue/details');
+  }
+
+  /** Read import candidates from the directory Sonarr itself can access. */
+  async getManualImport(folder: string): Promise<SonarrManualImportFile[]> {
+    if (!folder || !folder.startsWith('/') || folder.includes('\\0')) {
+      throw new Error('A valid absolute Sonarr-side folder is required');
+    }
+    const params = new URLSearchParams({ folder, filterExistingFiles: 'true' });
+    return this['request']<SonarrManualImportFile[]>(`/manualimport?${params}`);
+  }
+
+  /** Dispatch a reviewed manual import. The caller must validate file and episode IDs. */
+  async executeManualImport(files: SonarrManualImportFile[]): Promise<{ id: number; status?: string }> {
+    return this['request']<{ id: number; status?: string }>('/command', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'ManualImport', importMode: 'move', files }),
+    });
   }
 
   /**
