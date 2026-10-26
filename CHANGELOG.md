@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.4-custom.2] - 2026-10-26
+
+### Added
+- Sonarr manual-import queue diagnostics, candidate analysis and validated import tools.
+
+
+
 ## [1.7.3] - 2026-07-29
 
 ### Fixed
