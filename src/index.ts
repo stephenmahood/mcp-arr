@@ -1703,7 +1703,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const episodes = await clients.sonarr.getEpisodes(seriesId);
         const selected = episodes.filter(ep => episodeIds.includes(ep.id));
         if (selected.length !== episodeIds.length) throw new Error("Some episode IDs do not belong to the selected series");
-        const file = { ...candidate, series, episodes: selected, episodeIds };
+        const file = { ...candidate, seriesId, series, episodes: selected, episodeIds };
         const command = await clients.sonarr.executeManualImport([file]);
         return jsonText({ command, series: { id: series.id, title: series.title },
           episodes: selected.map(ep => ({ id: ep.id, seasonNumber: ep.seasonNumber,
