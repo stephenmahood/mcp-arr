@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.4-custom.3] - 2026-10-27
+
+### Fixed
+- Explicitly include Sonarr seriesId in manual-import command payload to avoid seriesId zero.
+
 ## [1.7.4-custom.2] - 2026-10-26
 
 ### Added
